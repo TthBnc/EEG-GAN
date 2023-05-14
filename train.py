@@ -111,6 +111,6 @@ for epoch in range(start_epoch, NUM_EPOCHS):
 
             step += 1
         
-        if epoch == 50:
+        if epoch % 50:
             save_checkpoint(epoch, gen, opt_gen, "generator_checkpoint.pth")
             save_checkpoint(epoch, critic, opt_critic, "critic_checkpoint.pth")
