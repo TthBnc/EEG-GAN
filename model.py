@@ -1,9 +1,6 @@
 import torch
 from torch import nn
 
-# Define the custom LeakyReLU activation function
-lrelu = nn.LeakyReLU(0.2)
-
 class PixelNorm1D(nn.Module):
     def __init__(self):
         super(PixelNorm1D, self).__init__()
@@ -12,17 +9,17 @@ class PixelNorm1D(nn.Module):
     def forward(self, x):
         return x / torch.sqrt(torch.mean(x ** 2, dim=1, keepdim=True) + self.epsilon)
 
-
 class UpsampleBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=9):
+    def __init__(self, in_channels, out_channels, kernel_size=9, scale_factor=2):
         super(UpsampleBlock, self).__init__()
         self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size, padding=kernel_size//2)
         self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size, padding=kernel_size//2)
-        self.lrelu = lrelu
+        self.lrelu = nn.LeakyReLU(0.2)
         self.pixel_norm = PixelNorm1D()
+        self.scale_factor = scale_factor
 
     def forward(self, x):
-        x = nn.functional.interpolate(x, scale_factor=2)  # Upsample
+        x = nn.functional.interpolate(x, scale_factor=self.scale_factor)  # Upsample
         x = self.lrelu(self.pixel_norm(self.conv1(x)))
         x = self.lrelu(self.pixel_norm(self.conv2(x)))
         return x
@@ -38,12 +35,12 @@ class EEG_GAN_Generator(nn.Module):
             UpsampleBlock(50, 50),
             UpsampleBlock(50, 50),
             UpsampleBlock(50, 50),
-            UpsampleBlock(50, 50),
+            UpsampleBlock(50, 50, scale_factor=1.791), # 1.79017857 1.4375
             nn.Conv1d(50, 3, kernel_size=1) # Changed the input channels to 3
         )
 
     def forward(self, z):
-        z = z.view(-1, self.latent_dim, 1)
+        z = z.view(-1, self.latent_dim)
         z = self.linear(z)
         z = z.view(-1, 50, 7) # Adjusted for 401
         return self.main(z)
@@ -53,7 +50,7 @@ class DownsampleBlock(nn.Module):
         super(DownsampleBlock, self).__init__()
         self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size, padding=kernel_size//2)
         self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size, padding=kernel_size//2)
-        self.lrelu = lrelu
+        self.lrelu = nn.LeakyReLU(0.2)
         self.avg_pool = nn.AvgPool1d(2)
 
     def forward(self, x):
@@ -73,7 +70,8 @@ class EEG_GAN_Discriminator(nn.Module):
             DownsampleBlock(50, 50),
             DownsampleBlock(50, 50),
             nn.Flatten(),
-            nn.Linear(50*13, 1) # Adjusted for 401 input
+            #nn.Linear(50*13, 1) # Adjusted for 401 input
+            nn.Linear(50*12, 1)
         )
 
     def forward(self, x):
