@@ -76,3 +76,65 @@ class EEG_GAN_Discriminator(nn.Module):
 
     def forward(self, x):
         return self.main(x)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class ProgressiveEEG_GAN_Generator(nn.Module):
+    def __init__(self, latent_dim):
+        super(ProgressiveEEG_GAN_Generator, self).__init__()
+        self.latent_dim = latent_dim
+        self.linear = nn.Linear(latent_dim, 50*7)
+        self.blocks = nn.ModuleList([
+            UpsampleBlock(50, 50),
+            UpsampleBlock(50, 50),
+            UpsampleBlock(50, 50),
+            UpsampleBlock(50, 50),
+            UpsampleBlock(50, 50),
+            UpsampleBlock(50, 50, scale_factor=1.791),
+        ])
+        self.to_rgb = nn.Conv1d(50, 3, kernel_size=1)
+
+    def forward(self, z, depth):
+        z = z.view(-1, self.latent_dim)
+        z = self.linear(z)
+        z = z.view(-1, 50, 7)
+        for i in range(depth + 1):
+            z = self.blocks[i](z)
+        return self.to_rgb(z)
+
+class ProgressiveEEG_GAN_Discriminator(nn.Module):
+    def __init__(self):
+        super(ProgressiveEEG_GAN_Discriminator, self).__init__()
+        self.blocks = nn.ModuleList([
+            DownsampleBlock(50, 50),
+            DownsampleBlock(50, 50),
+            DownsampleBlock(50, 50),
+            DownsampleBlock(50, 50),
+            DownsampleBlock(50, 50),
+        ])
+        self.from_rgb = nn.Conv1d(3, 50, kernel_size=1)
+        self.linear = nn.Linear(50*12, 1)
+
+    def forward(self, x, depth):
+        x = self.from_rgb(x)
+        for i in range(depth, -1, -1):
+            x = self.blocks[i](x)
+        x = x.view(x.size(0), -1)
+        return self.linear(x)
