@@ -5,7 +5,7 @@ from math import log2
 
 class WSConv1d(nn.Module):
     def __init__(
-        self, in_channels, out_channels, kernel_size=9, stride=1, gain=2
+        self, in_channels, out_channels, kernel_size=9, stride=1, padding=1, gain=2
     ):
         super(WSConv1d, self).__init__()
         self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride, padding=kernel_size//2)
@@ -54,10 +54,11 @@ class ConvBlock(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, z_dim, in_channels, signal_channels=1):
+    def __init__(self, z_dim, in_channels, initial_signal_size, signal_channels=1):
         super(Generator, self).__init__()
 
         self.z_dim = z_dim
+        self.initial_signal_size = initial_signal_size
         self.in_channels = in_channels
         self.leaky = nn.LeakyReLU(0.2)
 
@@ -70,7 +71,7 @@ class Generator(nn.Module):
         #     PixelNorm(),
         # )
         self.initial = nn.Sequential(
-            nn.Linear(z_dim, 50*7),
+            nn.Linear(z_dim, 50*initial_signal_size),
             nn.LeakyReLU(0.2)
         )
 
@@ -82,9 +83,11 @@ class Generator(nn.Module):
             nn.ModuleList([self.initial_signal]),
         )
 
-        for i in range(6): # 8 number of prog layers
-            conv_in_c = int(in_channels * in_channels)
-            conv_out_c = int(in_channels * in_channels)
+        for i in range(
+            len(factors) - 1 # len(factors) -1 == number of blocks
+        ):  # -1 to prevent index error because of factors[i+1]
+            conv_in_c = int(in_channels * factors[i])
+            conv_out_c = int(in_channels * factors[i + 1])
             self.prog_blocks.append(ConvBlock(conv_in_c, conv_out_c))
             self.signal_layers.append(
                 WSConv1d(conv_out_c, signal_channels, kernel_size=1, stride=1, padding=0)
@@ -101,21 +104,19 @@ class Generator(nn.Module):
         return torch.tanh(alpha * generated + (1 - alpha) * upscaled)
 
 
-    def forward(self, x, alpha, steps, final_step=False):
+    def forward(self, x, alpha, steps, scale_factors):
         # during training before calling gen
         # need to check if we are at the last step or not
         x = x.view(-1, self.z_dim)
         out = self.leaky(self.initial(x))
-        out = out.view(-1, 50, 7)
+        out = out.view(-1, 50, self.initial_signal_size)
 
         if steps == 0:
             return self.initial_signal(out)
 
         for step in range(steps):
-            if final_step:  # Check if it's the final step
-                scale_factor = 1.791
-            else:
-                scale_factor = 2
+            scale_factor = scale_factors[step]
+
             upscaled = F.interpolate(out, scale_factor=scale_factor, mode="nearest")
             out = self.prog_blocks[step](upscaled)
 
@@ -126,14 +127,16 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, z_dim, in_channels, signal_channels=1):
+    def __init__(self, z_dim, in_channels, initial_signal_size, signal_channels=1):
         super(Discriminator, self).__init__()
+
+        self.initial_signal_size = initial_signal_size
         self.prog_blocks, self.signal_layers = nn.ModuleList([]), nn.ModuleList([])
         self.leaky = nn.LeakyReLU(0.2)
 
-        for i in range(6, 0, -1):
-            conv_in = int(in_channels * in_channels)
-            conv_out = int(in_channels * in_channels)
+        for i in range(len(factors) - 1, 0, -1):
+            conv_in = int(in_channels * factors[i])
+            conv_out = int(in_channels * factors[i - 1])
             self.prog_blocks.append(ConvBlock(conv_in, conv_out, use_pixelnorm=False))
             self.signal_layers.append(
                 WSConv1d(signal_channels, conv_in, kernel_size=1, stride=1, padding=0)
@@ -148,9 +151,9 @@ class Discriminator(nn.Module):
         )
 
         self.final_block = nn.Sequential(
-            WSConv1d(in_channels + 1, in_channels, kernel_size=3, padding=1),
+            WSConv1d(in_channels + 1, in_channels, kernel_size=9),
             nn.LeakyReLU(0.2),
-            WSConv1d(in_channels, in_channels, kernel_size=4, padding=0, stride=1),
+            WSConv1d(in_channels, in_channels, kernel_size=9),
             nn.LeakyReLU(0.2),
            
             # ConvBlock(in_channels, in_channels, use_pixelnorm=False),
@@ -158,10 +161,12 @@ class Discriminator(nn.Module):
             # WSConv1d(
             #     in_channels, 1, kernel_size=1, padding=0, stride=1
             # ),
+
             nn.Flatten(),
-            # nn.Linear(in_channels*12, 1),
-            nn.Linear(in_channels*4, 1),
+            # # nn.Linear(in_channels*12, 1),
+            nn.Linear(in_channels*initial_signal_size, 1),
         )
+
     def minibatch_std(self, x):
         """
         Add standard deviation of the minibatch as a feature map.
@@ -181,10 +186,14 @@ class Discriminator(nn.Module):
         out = self.leaky(self.signal_layers[cur_step](x))
 
         if steps == 0:
+            # print(f'1 {out.shape}')
             out = self.minibatch_std(out)
+            # print(f'2 {out.shape}')
             out = self.final_block(out)
-            out = out.view(out.shape[0], -1)
-            return out
+            # print(f'3 {out.shape}')
+            # out = out.view(out.shape[0], -1)
+            # print(f'5 {out.shape}')
+            return out 
 
         downscaled = self.leaky(self.signal_layers[cur_step + 1](self.avg_pool(x)))
         out = self.avg_pool(self.prog_blocks[cur_step](out))
@@ -199,19 +208,41 @@ class Discriminator(nn.Module):
 
 
 if __name__ == "__main__":
+    # signal_sizes = [7, 14, 28, 56, 112, 224, 401]
+    real = torch.randn((48, 1, 401)) # from dataloader
+    desired_steps = 6
+    factors = [1 for _ in range(desired_steps + 1)]
+    signal_sizes = []
+    scale_factors = []
+
+    for steps in range(desired_steps + 1):
+        if steps == 0:
+            signal_sizes.append(real.shape[2])
+        else:
+            signal_sizes.append(signal_sizes[steps-1] // 2)
+
+    signal_sizes.sort()
+
+    last_signal_size = 0
+    for signal_size in signal_sizes:
+        if not signal_size == signal_sizes[0]:
+            scale_factors.append(signal_size / last_signal_size)
+        last_signal_size = signal_size
+
     Z_DIM = 200
     IN_CHANNELS = 50
-    gen = Generator(Z_DIM, IN_CHANNELS, signal_channels=1)
-    critic = Discriminator(Z_DIM, IN_CHANNELS, signal_channels=1)
-    signal_sizes = [7, 14, 28, 56, 112, 224, 401]
+    gen = Generator(Z_DIM, IN_CHANNELS, signal_sizes[0], signal_channels=1)
+    critic = Discriminator(Z_DIM, IN_CHANNELS, signal_sizes[0], signal_channels=1)
 
-    for signal_size in signal_sizes:
-        num_steps = int(log2(signal_size / 4))
+    for idx, signal_size in enumerate(signal_sizes):
+        # num_steps = int(log2(signal_size / 4))
+        num_steps = idx
         x = torch.randn((1, Z_DIM, 1))
-        if signal_size == signal_sizes - 1: # final block
-            z = gen(x, 0.5, steps=num_steps, final_step=True)
-        else:
-            z = gen(x, 0.5, steps=num_steps)
+        # if signal_size == signal_sizes - 1: # final block
+        #     z = gen(x, 0.5, steps=num_steps, final_step=True)
+        # else:
+        #     z = gen(x, 0.5, steps=num_steps)
+        z = gen(x, 0.5, steps=num_steps, scale_factors=scale_factors)
         assert z.shape == (1, 1, signal_size)
         out = critic(z, alpha=0.5, steps=num_steps)
         assert out.shape == (1, 1)

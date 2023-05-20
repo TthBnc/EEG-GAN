@@ -167,10 +167,13 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(0.2),
             WSConv2d(in_channels, in_channels, kernel_size=4, padding=0, stride=1),
             nn.LeakyReLU(0.2),
-            WSConv2d(
-                in_channels, 1, kernel_size=1, padding=0, stride=1
-            ),  # we use this instead of linear layer
+            # WSConv2d(
+            #     in_channels, 1, kernel_size=1, padding=0, stride=1
+            # ),  # we use this instead of linear layer
         )
+        self.linear_conv = WSConv2d(
+                in_channels, 1, kernel_size=1, padding=0, stride=1
+            ), 
 
     def fade_in(self, alpha, downscaled, out):
         """Used to fade in downscaled using avg pooling and output from CNN"""
@@ -198,8 +201,16 @@ class Discriminator(nn.Module):
         out = self.leaky(self.rgb_layers[cur_step](x))
 
         if steps == 0:  # i.e, image is 4x4
+            print(f'1 {out.shape}')
             out = self.minibatch_std(out)
-            return self.final_block(out).view(out.shape[0], -1)
+            print(f'2 {out.shape}')
+            out = self.final_block(out)
+            print(f'3 {out.shape}')
+            out = self.linear_conv(out)
+            print(f'4 {out.shape}')
+            out = out.view(out.shape[0], -1)
+            print(f'5 {out.shape}')
+            return out
 
         # because prog_blocks might change the channels, for down scale we use rgb_layer
         # from previous/smaller size which in our case correlates to +1 in the indexing

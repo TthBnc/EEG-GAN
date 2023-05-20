@@ -24,7 +24,7 @@ CRITIC_ITERATIONS = 5
 LAMBDA_GP = 10
 
 # Dataset parameters
-DATA_FOLDER = "data"
+DATA_FOLDER = "resources/data"
 SUBJECT_IDS = [1] # list from 1-9, MI_DATASET_ALL uses all by default
 SIGNALS = ["feet"] # list of the desired signals (feet, right/left_hand, tounge)
 
