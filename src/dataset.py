@@ -29,12 +29,12 @@ cfg = dict(
 )
 
 class MI_Dataset(Dataset):
-    def __init__(self, subject_id, runs, signals=None, device="cpu", config="default", verbose=False):
+    def __init__(self, subject_id, runs, signals=None, device="cpu", config="default", verbose=False, transform=None):
         self.subject_id = subject_id
         self.device = device
         self.runs = runs
         self.signals = signals if signals is not None else list(MAPPING.values())
-
+        self.transform = transform
         self.load_config()
         self.load_raw()
         self.apply_preprocess()
@@ -79,11 +79,10 @@ class MI_Dataset(Dataset):
         #     raw.pick_channels(channels_to_keep)
 
         # Not needed if .pick_channels is used
-        for raw in self.raws:
-            eog_channels = [
-                i for i, ch_name in enumerate(raw.ch_names) if "EOG" in ch_name
-            ]
-            raw.drop_channels([raw.ch_names[ch_idx] for ch_idx in eog_channels])
+        eog_channels = [
+            i for i, ch_name in enumerate(self.raw.ch_names) if "EOG" in ch_name
+        ]
+        self.raw.drop_channels([self.raw.ch_names[ch_idx] for ch_idx in eog_channels])
 
         self.filter_events()
 
@@ -122,6 +121,8 @@ class MI_Dataset(Dataset):
         # X = self.epochs.get_data()
         self.X = self.epochs.get_data()[:, :, :400]
 
+        if self.transform:
+            self.X, self.y = self.transform(self.X, self.y)
 
         if self.normalize:
             orig_shape = X.shape
@@ -175,12 +176,13 @@ class MI_Dataset(Dataset):
 
 
 class MI_Dataset_ALL(Dataset):
-    def __init__(self, data_folder="data", subject_ids=list(range(1, 10)), signals=None, device="cpu", config="default", verbose=False):
+    def __init__(self, data_folder="data", subject_ids=list(range(1, 10)), signals=None, device="cpu", config="default", verbose=False, transform=None):
         self.data_root = data_folder
         self.subject_ids = subject_ids
         self.device = device
 
         self.signals = signals if signals is not None else list(MAPPING.values())  # Include all signals by default
+        self.transform = transform
 
         self.load_config()
         self.load_raw()
@@ -225,11 +227,17 @@ class MI_Dataset_ALL(Dataset):
             for subject_path in self.subject_paths
         ]
 
+        # channels_to_keep = ["EEG-Cz", "EEG-C4", "EEG-C3"]
         
-        channels_to_keep = ["EEG-Cz", "EEG-C4", "EEG-C3"]
-        
+        # for raw in self.raws:
+        #     raw.pick_channels(channels_to_keep)
+
+        # Only needed if pick_channels isn't used
         for raw in self.raws:
-            raw.pick_channels(channels_to_keep)
+            eog_channels = [
+                i for i, ch_name in enumerate(raw.ch_names) if "EOG" in ch_name
+            ]
+            raw.drop_channels([raw.ch_names[ch_idx] for ch_idx in eog_channels])
 
         self.filter_events()
 
@@ -273,10 +281,14 @@ class MI_Dataset_ALL(Dataset):
         del self.raws
 
     def format_data(self):
-        self.X = self.epochs.get_data()
+        # self.X = self.epochs.get_data()
+        self.X = self.epochs.get_data()[:, :, :400]
 
         self.y = self.epochs.events[:, -1]
         self.y -= 1  # start at 0
+
+        if self.transform:
+            self.X, self.y = self.transform(self.X, self.y)
 
         if self.normalize:
             self.do_normalize()

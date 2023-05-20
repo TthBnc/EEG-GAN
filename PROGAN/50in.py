@@ -209,7 +209,8 @@ class Discriminator(nn.Module):
 
 if __name__ == "__main__":
     # signal_sizes = [7, 14, 28, 56, 112, 224, 401]
-    real = torch.randn((48, 1, 400)) # from dataloader
+    real = torch.randn((48, 22, 400)) # from dataloader
+    signal_channels = 22
     desired_steps = 6
     factors = [1 for _ in range(desired_steps + 1)]
     signal_sizes = []
@@ -231,19 +232,19 @@ if __name__ == "__main__":
 
     Z_DIM = 200
     IN_CHANNELS = 50
-    gen = Generator(Z_DIM, IN_CHANNELS, signal_sizes[0], signal_channels=1)
-    critic = Discriminator(Z_DIM, IN_CHANNELS, signal_sizes[0], signal_channels=1)
+    gen = Generator(Z_DIM, IN_CHANNELS, signal_sizes[0], signal_channels=signal_channels)
+    critic = Discriminator(Z_DIM, IN_CHANNELS, signal_sizes[0], signal_channels=signal_channels)
 
     for idx, signal_size in enumerate(signal_sizes):
         # num_steps = int(log2(signal_size / 4))
         num_steps = idx
-        x = torch.randn((1, Z_DIM, 1))
+        x = torch.randn((48, Z_DIM, 1))
         # if signal_size == signal_sizes - 1: # final block
         #     z = gen(x, 0.5, steps=num_steps, final_step=True)
         # else:
         #     z = gen(x, 0.5, steps=num_steps)
         z = gen(x, 0.5, steps=num_steps, scale_factors=scale_factors)
-        assert z.shape == (1, 1, signal_size)
+        assert z.shape == (48, signal_channels, signal_size)
         out = critic(z, alpha=0.5, steps=num_steps)
-        assert out.shape == (1, 1)
+        assert out.shape == (48, 1)
         print(f"Success! At signal size: {signal_size}")

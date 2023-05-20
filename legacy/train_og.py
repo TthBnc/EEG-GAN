@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from utils import gradient_penalty, save_checkpoint, load_checkpoint
-from model import Discriminator, Generator, initialize_weights
+from model import EEG_PRO_GAN_Discriminator, EEG_PRO_GAN_Generator, initialize_weights
 
 # Hyperparameters etc.
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -44,8 +44,8 @@ loader = DataLoader(
 
 # initialize gen and disc, note: discriminator should be called critic,
 # according to WGAN paper (since it no longer outputs between [0, 1])
-gen = Generator(Z_DIM, CHANNELS_IMG, FEATURES_GEN).to(device)
-critic = Discriminator(CHANNELS_IMG, FEATURES_CRITIC).to(device)
+gen = EEG_PRO_GAN_Generator(Z_DIM, CHANNELS_IMG, FEATURES_GEN).to(device)
+critic = EEG_PRO_GAN_Discriminator(CHANNELS_IMG, FEATURES_CRITIC).to(device)
 initialize_weights(gen)
 initialize_weights(critic)
 

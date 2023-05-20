@@ -13,7 +13,7 @@ from utils import (
     load_checkpoint,
     generate_examples,
 )
-from model import Discriminator, Generator
+from model import EEG_PRO_GAN_Discriminator, EEG_PRO_GAN_Generator
 from math import log2
 from tqdm import tqdm
 import config
@@ -125,10 +125,10 @@ def main():
     # initialize gen and disc, note: discriminator should be called critic,
     # according to WGAN paper (since it no longer outputs between [0, 1])
     # but really who cares..
-    gen = Generator(
+    gen = EEG_PRO_GAN_Generator(
         config.Z_DIM, config.IN_CHANNELS, img_channels=config.CHANNELS_IMG
     ).to(config.DEVICE)
-    critic = Discriminator(
+    critic = EEG_PRO_GAN_Discriminator(
         config.Z_DIM, config.IN_CHANNELS, img_channels=config.CHANNELS_IMG
     ).to(config.DEVICE)
 
