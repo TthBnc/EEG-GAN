@@ -209,7 +209,7 @@ class Discriminator(nn.Module):
 
 if __name__ == "__main__":
     # signal_sizes = [7, 14, 28, 56, 112, 224, 401]
-    real = torch.randn((48, 1, 401)) # from dataloader
+    real = torch.randn((48, 1, 400)) # from dataloader
     desired_steps = 6
     factors = [1 for _ in range(desired_steps + 1)]
     signal_sizes = []

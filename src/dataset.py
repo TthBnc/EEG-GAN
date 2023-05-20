@@ -110,7 +110,9 @@ class MI_Dataset(Dataset):
         del self.raw
 
     def split_by_runs(self):
-        X = self.epochs.get_data()
+        # X = self.epochs.get_data()
+        self.X = self.epochs.get_data()[:, :, :400]
+
 
         if self.normalize:
             orig_shape = X.shape
