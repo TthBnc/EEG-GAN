@@ -72,9 +72,18 @@ class MI_Dataset(Dataset):
         subject_path =  "A0" + str(self.subject_id) + "T.gdf"
         self.raw = mne.io.read_raw_gdf(subject_path, preload=True)
 
-        channels_to_keep = ["EEG-Cz", "EEG-C4", "EEG-C3"]
-        self.raw.pick_channels(channels_to_keep)
+        # # Keep only desired channels
+        # channels_to_keep = ["EEG-Cz", "EEG-C4", "EEG-C3"]
+        # # self.raw.pick_channels(channels_to_keep)
+        # for raw in self.raws:
+        #     raw.pick_channels(channels_to_keep)
 
+        # Not needed if .pick_channels is used
+        for raw in self.raws:
+            eog_channels = [
+                i for i, ch_name in enumerate(raw.ch_names) if "EOG" in ch_name
+            ]
+            raw.drop_channels([raw.ch_names[ch_idx] for ch_idx in eog_channels])
 
         self.filter_events()
 
