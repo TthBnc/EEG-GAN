@@ -179,7 +179,9 @@ class EEG_PRO_GAN_Discriminator(nn.Module):
     def fade_in(self, alpha, downscaled, out):
         """Used to fade in downscaled using avg pooling and output from CNN"""
         # alpha should be scalar within [0, 1], and upscale.shape == generated.shape
-        return torch.tanh(alpha * out + (1 - alpha) * downscaled)
+        # return torch.tanh(alpha * out + (1 - alpha) * downscaled)
+        return alpha * out + (1 - alpha) * downscaled
+
     
     def forward(self, x, alpha, steps):
         cur_step = len(self.prog_blocks) - steps

@@ -13,8 +13,8 @@ class ResizeTransform:
 
 def gradient_penalty(critic, real, alpha, step, fake, device="cpu"):
     BATCH_SIZE, C, H = real.shape
-    alpha = torch.rand((BATCH_SIZE, 1, 1)).repeat(1, C, H).to(device)
-    interpolated_images = real * alpha + fake * (1 - alpha)
+    beta = torch.rand((BATCH_SIZE, 1, 1)).repeat(1, C, H).to(device)
+    interpolated_images = real * beta + fake * (1 - beta)
 
     # Calculate critic scores
     mixed_scores = critic(interpolated_images, alpha, step,)

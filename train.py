@@ -39,33 +39,34 @@ def train_fn(critic,
                 noise = torch.randn(cur_batch_size, Z_DIM, 1).to(DEVICE)
                 fake = gen(noise, alpha=alpha, steps=step, scale_factors=SCALE_FACTORS)
                 critic_real = critic(real, alpha=alpha, steps=step).reshape(-1)
-                critic_fake = critic(fake.detach(), alpha=alpha, steps=step).reshape(-1)
+                # critic_fake = critic(fake.detach(), alpha=alpha, steps=step).reshape(-1)
+                critic_fake = critic(fake, alpha=alpha, steps=step).reshape(-1)
 
                 gp = gradient_penalty(critic, real, alpha, step, fake, device=DEVICE)
                 w_dist = torch.mean(critic_real) - torch.mean(critic_fake)
                 # Update the critic loss function
                 loss_critic = -w_dist + torch.max(w_dist, torch.zeros_like(w_dist)) * LAMBDA_GP * gp
             
-        opt_critic.zero_grad()
-        scaler_critic.scale(loss_critic).backward()
-        scaler_critic.step(opt_critic)
-        scaler_critic.update()
-        # critic.zero_grad()
-        # loss_critic.backward()
-        # opt_critic.step()
+        # opt_critic.zero_grad()
+        # scaler_critic.scale(loss_critic).backward()
+        # scaler_critic.step(opt_critic)
+        # scaler_critic.update()
+        critic.zero_grad()
+        loss_critic.backward(retain_graph=True)
+        opt_critic.step()
 
         # Train Generator: max E[critic(gen_fake)] <-> min -E[critic(gen_fake)]
         with torch.cuda.amp.autocast():
             gen_fake = critic(fake, alpha=alpha, steps=step).reshape(-1)
             loss_gen = -torch.mean(gen_fake)
 
-        opt_gen.zero_grad()
-        scaler_gen.scale(loss_gen).backward()
-        scaler_gen.step(opt_gen)
-        scaler_gen.update()
-        # gen.zero_grad()
-        # loss_gen.backward()
-        # opt_gen.step()
+        # opt_gen.zero_grad()
+        # scaler_gen.scale(loss_gen).backward()
+        # scaler_gen.step(opt_gen)
+        # scaler_gen.update()
+        gen.zero_grad()
+        loss_gen.backward()
+        opt_gen.step()
 
         alpha += cur_batch_size / (
             (PROGRESSIVE_EPOCHS[step] * 0.5) * len(dataset)
@@ -73,7 +74,7 @@ def train_fn(critic,
         alpha = min(alpha, 1)
 
         # Print losses occasionally and print to tensorboard
-        if batch_idx % 10 == 0 and batch_idx > 0:
+        if batch_idx % 21 == 0 and batch_idx > 0:
             print(
                 f"Epoch [{epoch}/{num_epochs}] Batch {batch_idx}/{len(loader)} \
                   Loss D: {loss_critic:.4f}, loss G: {loss_gen:.4f}"
@@ -101,16 +102,16 @@ def train_fn(critic,
 
             tensorboard_step += 1
         
-        # if epoch % 50:
-        #     save_checkpoint(epoch, gen, opt_gen, "generator_checkpoint.pth")
-        #     save_checkpoint(epoch, critic, opt_critic, "critic_checkpoint.pth")
+        if epoch % 250:
+            save_checkpoint(step, epoch, gen, opt_gen, "generator_checkpoint.pth")
+            save_checkpoint(step, epoch, critic, opt_critic, "critic_checkpoint.pth")
 
     return tensorboard_step, alpha
 
 def get_loader(signal_size, batch_size):
     transform = ResizeTransform(signal_size)
     dataset = MI_Dataset_ALL(DATA_FOLDER, signals=SIGNALS, device=DEVICE, verbose=True, transform=transform)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return loader, dataset
 
 # Hyperparameters etc.
@@ -120,8 +121,8 @@ LEARNING_RATE = 1e-3
 SIGNAL_CHANNELS = 22 # 3 if cz, c4 and c3
 IN_CHANNELS = 50
 Z_DIM = 200
-NUM_EPOCHS = 4 # half for fading half when faded in
-BATCH_SIZES = [32, 16, 16, 16, 16, 8, 4]
+NUM_EPOCHS = 1000 # half for fading half when faded in
+BATCH_SIZES = [32, 32, 32, 32, 16, 16, 16]
 PROGRESSIVE_EPOCHS = [NUM_EPOCHS] * len(BATCH_SIZES)
 CRITIC_ITERATIONS = 5
 LAMBDA_GP = 10
@@ -153,8 +154,8 @@ for signal_size in SIGNAL_SIZES:
 
 # initialize gen and disc, note: discriminator should be called critic,
 # according to WGAN paper (since it no longer outputs between [0, 1])
-gen = EEG_PRO_GAN_Generator(Z_DIM, IN_CHANNELS, SIGNAL_SIZES[0], factors=SCALE_FACTORS, signal_channels=SIGNAL_CHANNELS).to(DEVICE)
-critic = EEG_PRO_GAN_Discriminator(Z_DIM, IN_CHANNELS, SIGNAL_SIZES[0], factors=SCALE_FACTORS, signal_channels=SIGNAL_CHANNELS).to(DEVICE)
+gen = EEG_PRO_GAN_Generator(Z_DIM, IN_CHANNELS, SIGNAL_SIZES[0], factors=FACTORS, signal_channels=SIGNAL_CHANNELS).to(DEVICE)
+critic = EEG_PRO_GAN_Discriminator(Z_DIM, IN_CHANNELS, SIGNAL_SIZES[0], factors=FACTORS, signal_channels=SIGNAL_CHANNELS).to(DEVICE)
 
 # initializate optimizer
 opt_gen = optim.Adam(gen.parameters(), lr=LEARNING_RATE, betas=(0.0, 0.99))
@@ -196,9 +197,11 @@ for num_epochs in PROGRESSIVE_EPOCHS[step:]:
             num_epochs
         )
 
-        if epoch % 250:
-            save_checkpoint(step, epoch, gen, opt_gen, "generator_checkpoint.pth")
-            save_checkpoint(step, epoch, critic, opt_critic, "critic_checkpoint.pth")
+        # if epoch % 250:
+        #     save_checkpoint(step, epoch, gen, opt_gen, "generator_checkpoint.pth")
+        #     save_checkpoint(step, epoch, critic, opt_critic, "critic_checkpoint.pth")
+    save_checkpoint(step, 9999, gen, opt_gen, "generator_checkpoint.pth")
+    save_checkpoint(step, 9999, critic, opt_critic, "critic_checkpoint.pth")
 
     step += 1  # progress to the next img size
 
