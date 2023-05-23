@@ -215,6 +215,7 @@ class MI_Dataset_ALL(Dataset):
         return self.X[idx], self.y[idx]
 
 from scipy import signal
+from torch.utils.data import DataLoader
 
 class ResizeTransform:
     def __init__(self, new_size):
@@ -225,7 +226,13 @@ class ResizeTransform:
         X_resized = signal.resample(X, self.new_size, axis=2)
         return X_resized, y
 
+def main():
+    transform = ResizeTransform(6)
+    dataset = MI_Dataset_ALL("resources/data", device="cpu", verbose=True, transform=transform)
+    loader = DataLoader(dataset, batch_size=96, shuffle=True, num_workers=4)
 
-transform = ResizeTransform(6)
-dataset = MI_Dataset_ALL("resources/data", signals=["feet"], device="cpu", verbose=True, transform=transform)
+
+
+if __name__ == '__main__':
+    main()
 

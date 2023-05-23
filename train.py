@@ -26,7 +26,15 @@ def train_fn(critic,
             scaler_gen,
             scaler_critic,
             epoch,
-            num_epochs):
+            num_epochs,
+            fixed_noise,
+            DEVICE,
+            CRITIC_ITERATIONS,
+            Z_DIM,
+            SCALE_FACTORS,
+            LAMBDA_GP,
+            PROGRESSIVE_EPOCHS,
+            SIGNAL_CHANNELS):
     loop = tqdm(loader)
     for batch_idx, (real, _) in enumerate(loop):
         real = real.to(DEVICE)
@@ -102,108 +110,121 @@ def train_fn(critic,
 
             tensorboard_step += 1
         
-        if epoch % 250:
-            save_checkpoint(step, epoch, gen, opt_gen, "generator_checkpoint.pth")
-            save_checkpoint(step, epoch, critic, opt_critic, "critic_checkpoint.pth")
+        if epoch % 250 == 0:
+            save_checkpoint(step, epoch, gen, opt_gen, "ALL_generator_checkpoint.pth")
+            save_checkpoint(step, epoch, critic, opt_critic, "ALL_critic_checkpoint.pth")
 
     return tensorboard_step, alpha
 
-def get_loader(signal_size, batch_size):
+def get_loader(signal_size, batch_size, DATA_FOLDER, DEVICE):
     transform = ResizeTransform(signal_size)
-    dataset = MI_Dataset_ALL(DATA_FOLDER, signals=SIGNALS, device=DEVICE, verbose=True, transform=transform)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataset = MI_Dataset_ALL(DATA_FOLDER, device=DEVICE, verbose=True, transform=transform) # uses all signals by default
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     return loader, dataset
 
-# Hyperparameters etc.
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-LEARNING_RATE = 1e-3
-# BATCH_SIZE = 48
-SIGNAL_CHANNELS = 22 # 3 if cz, c4 and c3
-IN_CHANNELS = 50
-Z_DIM = 200
-NUM_EPOCHS = 1000 # half for fading half when faded in
-BATCH_SIZES = [32, 32, 32, 32, 16, 16, 16]
-PROGRESSIVE_EPOCHS = [NUM_EPOCHS] * len(BATCH_SIZES)
-CRITIC_ITERATIONS = 5
-LAMBDA_GP = 10
 
-# Dataset parameters
-DATA_FOLDER = "resources/data"
-SUBJECT_IDS = [1] # list from 1-9, MI_DATASET_ALL uses all by default
-SIGNALS = ["feet"] # list of the desired signals (feet, right/left_hand, tounge)
+def main():
+    # Hyperparameters etc.
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    LEARNING_RATE = 1e-2
+    # BATCH_SIZE = 48
+    SIGNAL_CHANNELS = 22 # 3 if cz, c4 and c3
+    IN_CHANNELS = 50
+    Z_DIM = 200
+    NUM_EPOCHS = 1000 # half for fading half when faded in
+    BATCH_SIZES = [96, 96, 96, 96, 80, 64, 48]
+    PROGRESSIVE_EPOCHS = [NUM_EPOCHS] * len(BATCH_SIZES)
+    CRITIC_ITERATIONS = 5
+    LAMBDA_GP = 10
 
-real = torch.randn((48, 1, 400))
-DESIRED_STEPS = 6
-FACTORS = [1 for _ in range(DESIRED_STEPS + 1)]
-SIGNAL_SIZES = []
-SCALE_FACTORS = []
+    # Dataset parameters
+    DATA_FOLDER = "resources/data"
+    SUBJECT_IDS = [1] # list from 1-9, MI_DATASET_ALL uses all by default
+    SIGNALS = ["feet"] # list of the desired signals (feet, right/left_hand, tounge)
 
-for steps in range(DESIRED_STEPS + 1):
-    if steps == 0:
-        SIGNAL_SIZES.append(real.shape[2])
-    else:
-        SIGNAL_SIZES.append(SIGNAL_SIZES[steps-1] // 2)
+    real = torch.randn((48, 1, 400))
+    DESIRED_STEPS = 6
+    FACTORS = [1 for _ in range(DESIRED_STEPS + 1)]
+    SIGNAL_SIZES = []
+    SCALE_FACTORS = []
 
-SIGNAL_SIZES.sort()
+    for steps in range(DESIRED_STEPS + 1):
+        if steps == 0:
+            SIGNAL_SIZES.append(real.shape[2])
+        else:
+            SIGNAL_SIZES.append(SIGNAL_SIZES[steps-1] // 2)
 
-last_signal_size = 0
-for signal_size in SIGNAL_SIZES:
-    if not signal_size == SIGNAL_SIZES[0]:
-        SCALE_FACTORS.append(signal_size / last_signal_size)
-    last_signal_size = signal_size
+    SIGNAL_SIZES.sort()
 
-# initialize gen and disc, note: discriminator should be called critic,
-# according to WGAN paper (since it no longer outputs between [0, 1])
-gen = EEG_PRO_GAN_Generator(Z_DIM, IN_CHANNELS, SIGNAL_SIZES[0], factors=FACTORS, signal_channels=SIGNAL_CHANNELS).to(DEVICE)
-critic = EEG_PRO_GAN_Discriminator(Z_DIM, IN_CHANNELS, SIGNAL_SIZES[0], factors=FACTORS, signal_channels=SIGNAL_CHANNELS).to(DEVICE)
+    last_signal_size = 0
+    for signal_size in SIGNAL_SIZES:
+        if not signal_size == SIGNAL_SIZES[0]:
+            SCALE_FACTORS.append(signal_size / last_signal_size)
+        last_signal_size = signal_size
 
-# initializate optimizer
-opt_gen = optim.Adam(gen.parameters(), lr=LEARNING_RATE, betas=(0.0, 0.99))
-opt_critic = optim.Adam(critic.parameters(), lr=LEARNING_RATE, betas=(0.0, 0.99))
+    # initialize gen and disc, note: discriminator should be called critic,
+    # according to WGAN paper (since it no longer outputs between [0, 1])
+    gen = EEG_PRO_GAN_Generator(Z_DIM, IN_CHANNELS, SIGNAL_SIZES[0], factors=FACTORS, signal_channels=SIGNAL_CHANNELS).to(DEVICE)
+    critic = EEG_PRO_GAN_Discriminator(Z_DIM, IN_CHANNELS, SIGNAL_SIZES[0], factors=FACTORS, signal_channels=SIGNAL_CHANNELS).to(DEVICE)
 
-scaler_critic = torch.cuda.amp.GradScaler()
-scaler_gen = torch.cuda.amp.GradScaler()
+    # initializate optimizer
+    opt_gen = optim.Adam(gen.parameters(), lr=LEARNING_RATE, betas=(0.0, 0.99))
+    opt_critic = optim.Adam(critic.parameters(), lr=LEARNING_RATE, betas=(0.0, 0.99))
 
-fixed_noise = torch.randn(BATCH_SIZES[-1], Z_DIM, 1).to(DEVICE)
-writer = SummaryWriter(f"logs/EEG")
-# writer_fake = SummaryWriter(f"logs/EEG/fake")
+    scaler_critic = torch.cuda.amp.GradScaler()
+    scaler_gen = torch.cuda.amp.GradScaler()
 
-gen.train()
-critic.train()
+    fixed_noise = torch.randn(BATCH_SIZES[-1], Z_DIM, 1).to(DEVICE)
+    writer = SummaryWriter(f"logs/EEG")
+    # writer_fake = SummaryWriter(f"logs/EEG/fake")
 
-step = 0 
-tensorboard_step = 0
-for num_epochs in PROGRESSIVE_EPOCHS[step:]:
-    alpha = 1e-5
-    loader, dataset = get_loader(SIGNAL_SIZES[step], BATCH_SIZES[step])
-    print(f"Current image size: {SIGNAL_SIZES[step]}")
+    gen.train()
+    critic.train()
 
-    for epoch in range(num_epochs):
-        print(f"Epoch [{epoch+1}/{num_epochs}]")
-        tensorboard_step, alpha = train_fn(
-            critic,
-            gen,
-            loader,
-            dataset,
-            step,
-            alpha,
-            opt_critic,
-            opt_gen,
-            tensorboard_step,
-            writer,
-            scaler_gen,
-            scaler_critic,
-            epoch,
-            num_epochs
-        )
+    step = 0 
+    tensorboard_step = 0
+    for num_epochs in PROGRESSIVE_EPOCHS[step:]:
+        alpha = 1e-5
+        loader, dataset = get_loader(SIGNAL_SIZES[step], BATCH_SIZES[step], DATA_FOLDER, DEVICE)
+        print(f"Current image size: {SIGNAL_SIZES[step]}")
 
-        # if epoch % 250:
-        #     save_checkpoint(step, epoch, gen, opt_gen, "generator_checkpoint.pth")
-        #     save_checkpoint(step, epoch, critic, opt_critic, "critic_checkpoint.pth")
-    save_checkpoint(step, 9999, gen, opt_gen, "generator_checkpoint.pth")
-    save_checkpoint(step, 9999, critic, opt_critic, "critic_checkpoint.pth")
+        for epoch in range(num_epochs):
+            print(f"Epoch [{epoch+1}/{num_epochs}]")
+            tensorboard_step, alpha = train_fn(
+                critic,
+                gen,
+                loader,
+                dataset,
+                step,
+                alpha,
+                opt_critic,
+                opt_gen,
+                tensorboard_step,
+                writer,
+                scaler_gen,
+                scaler_critic,
+                epoch,
+                num_epochs,
+                fixed_noise,
+                DEVICE,
+                CRITIC_ITERATIONS,
+                Z_DIM,
+                SCALE_FACTORS,
+                LAMBDA_GP,
+                PROGRESSIVE_EPOCHS,
+                SIGNAL_CHANNELS
+            )
 
-    step += 1  # progress to the next img size
+            # if epoch % 250:
+            #     save_checkpoint(step, epoch, gen, opt_gen, "generator_checkpoint.pth")
+            #     save_checkpoint(step, epoch, critic, opt_critic, "critic_checkpoint.pth")
+        save_checkpoint(step, num_epochs, gen, opt_gen, "ALL_generator_checkpoint.pth")
+        save_checkpoint(step, num_epochs, critic, opt_critic, "ALL_critic_checkpoint.pth")
+
+        step += 1  # progress to the next img size
+
+if __name__ == '__main__':
+    main()
 
 
 # start_epoch = 0 # if training from scratch
