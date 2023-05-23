@@ -82,44 +82,44 @@ def train_fn(critic,
         alpha = min(alpha, 1)
 
         # Print losses occasionally and print to tensorboard
-        if batch_idx % 21 == 0 and batch_idx > 0:
-            print(
-                f"Epoch [{epoch}/{num_epochs}] Batch {batch_idx}/{len(loader)} \
-                  Loss D: {loss_critic:.4f}, loss G: {loss_gen:.4f}"
-            )
-            with torch.no_grad():
-                fake = gen(fixed_noise, alpha=alpha, steps=step, scale_factors=SCALE_FACTORS)
+        # if epoch % 25 == 0:
+        #     # print(
+        #     #     f"Epoch [{epoch}/{num_epochs}] Batch {batch_idx}/{len(loader)} \
+        #     #       Loss D: {loss_critic:.4f}, loss G: {loss_gen:.4f}"
+        #     # )
+        #     with torch.no_grad():
+        #         fake = gen(fixed_noise, alpha=alpha, steps=step, scale_factors=SCALE_FACTORS)
 
-                if SIGNAL_CHANNELS > 1:
-                    fig, axs = plt.subplots(SIGNAL_CHANNELS*2)
-                    fig.suptitle('Real and Fake EEG signals')
-                    for i in range(SIGNAL_CHANNELS):
-                        axs[i].plot(real[0, i, :].cpu().numpy())
-                        axs[i].set_title(f"Real Channel {i+1}")
-                        axs[i+SIGNAL_CHANNELS].plot(fake[0, i, :].cpu().numpy())
-                        axs[i+SIGNAL_CHANNELS].set_title(f"Fake Channel {i+1}")
-                else:
-                    fig, axs = plt.subplots(2)
-                    fig.suptitle('Real and Fake EEG signals')
-                    axs[0].plot(real[0].cpu().numpy())
-                    axs[0].set_title("Real")
-                    axs[1].plot(fake[0].cpu().numpy())
-                    axs[1].set_title("Fake")
+        #         if SIGNAL_CHANNELS > 1:
+        #             fig, axs = plt.subplots(SIGNAL_CHANNELS*2)
+        #             fig.suptitle('Real and Fake EEG signals')
+        #             for i in range(4):
+        #                 axs[i].plot(real[0, i, :].cpu().numpy())
+        #                 axs[i].set_title(f"Real Channel {i+1}")
+        #                 axs[i+SIGNAL_CHANNELS].plot(fake[0, i, :].cpu().numpy())
+        #                 axs[i+SIGNAL_CHANNELS].set_title(f"Fake Channel {i+1}")
+        #         else:
+        #             fig, axs = plt.subplots(2)
+        #             fig.suptitle('Real and Fake EEG signals')
+        #             axs[0].plot(real[0].cpu().numpy())
+        #             axs[0].set_title("Real")
+        #             axs[1].plot(fake[0].cpu().numpy())
+        #             axs[1].set_title("Fake")
 
-                writer.add_figure("EEG signals", fig, global_step=tensorboard_step)
+        #         writer.add_figure("EEG signals", fig, global_step=tensorboard_step)
 
-            tensorboard_step += 1
+            # tensorboard_step += 1
         
         if epoch % 250 == 0:
             save_checkpoint(step, epoch, gen, opt_gen, "ALL_generator_checkpoint.pth")
             save_checkpoint(step, epoch, critic, opt_critic, "ALL_critic_checkpoint.pth")
 
-    return tensorboard_step, alpha
+    return tensorboard_step, alpha, loss_critic, loss_gen
 
 def get_loader(signal_size, batch_size, DATA_FOLDER, DEVICE):
     transform = ResizeTransform(signal_size)
     dataset = MI_Dataset_ALL(DATA_FOLDER, device=DEVICE, verbose=True, transform=transform) # uses all signals by default
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return loader, dataset
 
 
@@ -131,7 +131,7 @@ def main():
     SIGNAL_CHANNELS = 22 # 3 if cz, c4 and c3
     IN_CHANNELS = 50
     Z_DIM = 200
-    NUM_EPOCHS = 1000 # half for fading half when faded in
+    NUM_EPOCHS = 500 # half for fading half when faded in
     BATCH_SIZES = [96, 96, 96, 96, 80, 64, 48]
     PROGRESSIVE_EPOCHS = [NUM_EPOCHS] * len(BATCH_SIZES)
     CRITIC_ITERATIONS = 5
@@ -189,8 +189,8 @@ def main():
         print(f"Current image size: {SIGNAL_SIZES[step]}")
 
         for epoch in range(num_epochs):
-            print(f"Epoch [{epoch+1}/{num_epochs}]")
-            tensorboard_step, alpha = train_fn(
+            # print(f"Epoch [{epoch+1}/{num_epochs}]")
+            tensorboard_step, alpha, loss_critic, loss_gen = train_fn(
                 critic,
                 gen,
                 loader,
@@ -213,6 +213,10 @@ def main():
                 LAMBDA_GP,
                 PROGRESSIVE_EPOCHS,
                 SIGNAL_CHANNELS
+            )
+            print(
+                f"Epoch [{epoch}/{num_epochs}] \
+                  Loss D: {loss_critic:.4f}, loss G: {loss_gen:.4f}"
             )
 
             # if epoch % 250:
