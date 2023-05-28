@@ -85,14 +85,14 @@ cfg = dict(
 )
 
 class MI_Dataset_ALL(Dataset):
-    def __init__(self, data_folder="data", subject_ids=list(range(1, 10)), signals=None, device="cpu", config="default", verbose=False, transform=None):
-        
-        self.transform = transform
+    def __init__(self, data_folder="data", subject_ids=list(range(1, 10)), signals=None, device="cpu", config="default", verbose=False, transform=None, flatten=False):
         self.data_root = data_folder
         self.subject_ids = subject_ids
         self.device = device
 
         self.signals = signals if signals is not None else list(MAPPING.values())  # Include all signals by default
+        self.transform = transform
+        self.flatten = flatten
 
         self.load_config()
         self.load_raw()
@@ -137,11 +137,17 @@ class MI_Dataset_ALL(Dataset):
             for subject_path in self.subject_paths
         ]
 
+        # channels_to_keep = ["EEG-Cz", "EEG-C4", "EEG-C3"]
         
-        channels_to_keep = ["EEG-Cz", "EEG-C4", "EEG-C3"]
-        
+        # for raw in self.raws:
+        #     raw.pick_channels(channels_to_keep)
+
+        # Only needed if pick_channels isn't used
         for raw in self.raws:
-            raw.pick_channels(channels_to_keep)
+            eog_channels = [
+                i for i, ch_name in enumerate(raw.ch_names) if "EOG" in ch_name
+            ]
+            raw.drop_channels([raw.ch_names[ch_idx] for ch_idx in eog_channels])
 
         self.filter_events()
 
@@ -185,7 +191,8 @@ class MI_Dataset_ALL(Dataset):
         del self.raws
 
     def format_data(self):
-        self.X = self.epochs.get_data()
+        # self.X = self.epochs.get_data()
+        self.X = self.epochs.get_data()[:, :, :400]
 
         self.y = self.epochs.events[:, -1]
         self.y -= 1  # start at 0
@@ -195,6 +202,10 @@ class MI_Dataset_ALL(Dataset):
 
         if self.normalize:
             self.do_normalize()
+
+        if self.flatten:
+            self.X = self.X.reshape(-1, 1, self.X.shape[-1])
+
         self.X = torch.from_numpy(self.X).float()
         self.y = torch.from_numpy(self.y).long()
 
@@ -228,8 +239,8 @@ class ResizeTransform:
 
 def main():
     transform = ResizeTransform(6)
-    dataset = MI_Dataset_ALL("resources/data", device="cpu", verbose=True, transform=transform)
-    loader = DataLoader(dataset, batch_size=96, shuffle=True, num_workers=4)
+    dataset = MI_Dataset_ALL("resources/data", device="cpu", verbose=True, transform=transform, flatten=False)
+    # loader = DataLoader(dataset, batch_size=96, shuffle=True, num_workers=4)
 
 
 

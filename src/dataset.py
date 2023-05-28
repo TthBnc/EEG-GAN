@@ -29,12 +29,13 @@ cfg = dict(
 )
 
 class MI_Dataset(Dataset):
-    def __init__(self, subject_id, runs, signals=None, device="cpu", config="default", verbose=False, transform=None):
+    def __init__(self, subject_id, runs, signals=None, device="cpu", config="default", verbose=False, transform=None, flatten=False):
         self.subject_id = subject_id
         self.device = device
         self.runs = runs
         self.signals = signals if signals is not None else list(MAPPING.values())
         self.transform = transform
+        self.flatten = flatten
         self.load_config()
         self.load_raw()
         self.apply_preprocess()
@@ -133,6 +134,9 @@ class MI_Dataset(Dataset):
             y = self.epochs.events[:, -1]
         y -= 1  # start at 0
 
+        if self.flatten:
+            self.X = self.X.reshape(-1, 1, self.X.shape[-1])
+
         X_by_runs = []
         y_by_runs = []
 
@@ -176,13 +180,14 @@ class MI_Dataset(Dataset):
 
 
 class MI_Dataset_ALL(Dataset):
-    def __init__(self, data_folder="data", subject_ids=list(range(1, 10)), signals=None, device="cpu", config="default", verbose=False, transform=None):
+    def __init__(self, data_folder="data", subject_ids=list(range(1, 10)), signals=None, device="cpu", config="default", verbose=False, transform=None, flatten=False):
         self.data_root = data_folder
         self.subject_ids = subject_ids
         self.device = device
 
         self.signals = signals if signals is not None else list(MAPPING.values())  # Include all signals by default
         self.transform = transform
+        self.flatten = flatten
 
         self.load_config()
         self.load_raw()
@@ -292,6 +297,10 @@ class MI_Dataset_ALL(Dataset):
 
         if self.normalize:
             self.do_normalize()
+        
+        if self.flatten:
+            self.X = self.X.reshape(-1, 1, self.X.shape[-1])
+
         self.X = torch.from_numpy(self.X).float()
         self.y = torch.from_numpy(self.y).long()
 
