@@ -246,6 +246,17 @@ class MI_Dataset_ALL(Dataset):
 
         self.filter_events()
 
+    # def filter_events(self) -> None:
+    #     for raw in self.raws:
+    #         events, _ = mne.events_from_annotations(raw)
+    #         unique_raw_event_ids = np.unique(events[:, -1])
+    #         event_ids = {k: v for k, v in MAPPING.items() if v in self.signals}  # Filter the event_ids by signals
+    #         if any(id in unique_raw_event_ids for id in event_ids):
+    #             annot_from_events = mne.annotations_from_events(
+    #                 events, event_desc=event_ids, sfreq=raw.info["sfreq"]
+    #             )
+    #             raw.set_annotations(annot_from_events)
+
     def filter_events(self) -> None:
         for raw in self.raws:
             events, _ = mne.events_from_annotations(raw)
@@ -255,7 +266,7 @@ class MI_Dataset_ALL(Dataset):
             )
 
             raw.set_annotations(annot_from_events)
-
+            
     def apply_preprocess(self) -> None:
         def preprocess_raw(session):
             session = session.resample(self.target_freq, npad="auto")
@@ -300,6 +311,7 @@ class MI_Dataset_ALL(Dataset):
         
         if self.flatten:
             self.X = self.X.reshape(-1, 1, self.X.shape[-1])
+            self.y = np.repeat(self.y, 22)
 
         self.X = torch.from_numpy(self.X).float()
         self.y = torch.from_numpy(self.y).long()

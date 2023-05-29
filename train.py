@@ -13,6 +13,8 @@ from model import EEG_PRO_GAN_Generator, EEG_PRO_GAN_Discriminator
 from src.dataset import MI_Dataset_ALL
 from utils import ResizeTransform, gradient_penalty, save_checkpoint, load_checkpoint
 
+torch.backends.cudnn.benchmarks = True
+
 def train_fn(critic,
             gen,
             loader,
@@ -110,15 +112,15 @@ def train_fn(critic,
 
             # tensorboard_step += 1
         
-        if epoch % 250 == 0:
-            save_checkpoint(step, epoch, gen, opt_gen, "ALL_generator_checkpoint.pth")
-            save_checkpoint(step, epoch, critic, opt_critic, "ALL_critic_checkpoint.pth")
+        if epoch % 10 == 0 and epoch != 0:
+            save_checkpoint(step, epoch, gen, opt_gen, "tounge_generator_checkpoint.pth")
+            save_checkpoint(step, epoch, critic, opt_critic, "tounge_critic_checkpoint.pth")
 
     return tensorboard_step, alpha, loss_critic, loss_gen
 
-def get_loader(signal_size, batch_size, DATA_FOLDER, DEVICE):
+def get_loader(signal_size, batch_size, DATA_FOLDER, DEVICE, SIGNALS):
     transform = ResizeTransform(signal_size)
-    dataset = MI_Dataset_ALL(DATA_FOLDER, device=DEVICE, verbose=True, transform=transform) # uses all signals by default
+    dataset = MI_Dataset_ALL(DATA_FOLDER, signals=SIGNALS, device=DEVICE, verbose=True, transform=transform, flatten=True) # uses all signals by default
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return loader, dataset
 
@@ -128,11 +130,11 @@ def main():
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     LEARNING_RATE = 1e-2
     # BATCH_SIZE = 48
-    SIGNAL_CHANNELS = 22 # 3 if cz, c4 and c3
+    SIGNAL_CHANNELS = 1 # 22 # 3 if cz, c4 and c3
     IN_CHANNELS = 50
     Z_DIM = 200
-    NUM_EPOCHS = 500 # half for fading half when faded in
-    BATCH_SIZES = [96, 96, 96, 96, 80, 64, 48]
+    NUM_EPOCHS = 50 # half for fading half when faded in
+    BATCH_SIZES = [3072, 3072, 2048, 1536, 1024, 512, 512]
     PROGRESSIVE_EPOCHS = [NUM_EPOCHS] * len(BATCH_SIZES)
     CRITIC_ITERATIONS = 5
     LAMBDA_GP = 10
@@ -140,7 +142,7 @@ def main():
     # Dataset parameters
     DATA_FOLDER = "resources/data"
     SUBJECT_IDS = [1] # list from 1-9, MI_DATASET_ALL uses all by default
-    SIGNALS = ["feet"] # list of the desired signals (feet, right/left_hand, tounge)
+    SIGNALS = ["tounge"] # list of the desired signals (feet, right/left_hand, tounge)
 
     real = torch.randn((48, 1, 400))
     DESIRED_STEPS = 6
@@ -178,14 +180,18 @@ def main():
     writer = SummaryWriter(f"logs/EEG")
     # writer_fake = SummaryWriter(f"logs/EEG/fake")
 
+    _ = load_checkpoint(gen, opt_gen, "models/one_channel/all/ALL_generator_6_20.pth")
+    _ = load_checkpoint(critic, opt_critic, "models/one_channel/all/ALL_critic_6_20.pth")
+
+
     gen.train()
     critic.train()
 
-    step = 0 
+    step = DESIRED_STEPS 
     tensorboard_step = 0
     for num_epochs in PROGRESSIVE_EPOCHS[step:]:
         alpha = 1e-5
-        loader, dataset = get_loader(SIGNAL_SIZES[step], BATCH_SIZES[step], DATA_FOLDER, DEVICE)
+        loader, dataset = get_loader(SIGNAL_SIZES[step], BATCH_SIZES[step], DATA_FOLDER, DEVICE, SIGNALS)
         print(f"Current image size: {SIGNAL_SIZES[step]}")
 
         for epoch in range(num_epochs):
@@ -215,15 +221,15 @@ def main():
                 SIGNAL_CHANNELS
             )
             print(
-                f"Epoch [{epoch}/{num_epochs}] \
+                f"Epoch [{epoch+1}/{num_epochs}] \
                   Loss D: {loss_critic:.4f}, loss G: {loss_gen:.4f}"
             )
 
             # if epoch % 250:
             #     save_checkpoint(step, epoch, gen, opt_gen, "generator_checkpoint.pth")
             #     save_checkpoint(step, epoch, critic, opt_critic, "critic_checkpoint.pth")
-        save_checkpoint(step, num_epochs, gen, opt_gen, "ALL_generator_checkpoint.pth")
-        save_checkpoint(step, num_epochs, critic, opt_critic, "ALL_critic_checkpoint.pth")
+        save_checkpoint(step, num_epochs, gen, opt_gen, "tounge_generator.pth")
+        save_checkpoint(step, num_epochs, critic, opt_critic, "tounge_critic.pth")
 
         step += 1  # progress to the next img size
 
