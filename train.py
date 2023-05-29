@@ -120,7 +120,8 @@ def train_fn(critic,
 
 def get_loader(signal_size, batch_size, DATA_FOLDER, DEVICE, SIGNALS):
     transform = ResizeTransform(signal_size)
-    dataset = MI_Dataset_ALL(DATA_FOLDER, signals=SIGNALS, device=DEVICE, verbose=True, transform=transform, flatten=True) # uses all signals by default
+    # subject ids for right_hand & tongue
+    dataset = MI_Dataset_ALL(DATA_FOLDER, subject_ids=[1,2,3,5,6,7,8,9], signals=SIGNALS, device=DEVICE, verbose=True, transform=transform, flatten=True) # uses all signals by default
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return loader, dataset
 
