@@ -112,9 +112,9 @@ def train_fn(critic,
 
             # tensorboard_step += 1
         
-        # if epoch % 250 == 0:
-        #     save_checkpoint(step, epoch, gen, opt_gen, "ALL_generator_checkpoint.pth")
-        #     save_checkpoint(step, epoch, critic, opt_critic, "ALL_critic_checkpoint.pth")
+        if epoch % 10 == 0 and epoch != 0:
+            save_checkpoint(step, epoch, gen, opt_gen, "tounge_generator_checkpoint.pth")
+            save_checkpoint(step, epoch, critic, opt_critic, "tounge_critic_checkpoint.pth")
 
     return tensorboard_step, alpha, loss_critic, loss_gen
 
@@ -133,7 +133,7 @@ def main():
     SIGNAL_CHANNELS = 1 # 22 # 3 if cz, c4 and c3
     IN_CHANNELS = 50
     Z_DIM = 200
-    NUM_EPOCHS = 20 # half for fading half when faded in
+    NUM_EPOCHS = 50 # half for fading half when faded in
     BATCH_SIZES = [3072, 3072, 2048, 1536, 1024, 512, 512]
     PROGRESSIVE_EPOCHS = [NUM_EPOCHS] * len(BATCH_SIZES)
     CRITIC_ITERATIONS = 5
@@ -142,7 +142,7 @@ def main():
     # Dataset parameters
     DATA_FOLDER = "resources/data"
     SUBJECT_IDS = [1] # list from 1-9, MI_DATASET_ALL uses all by default
-    SIGNALS = ["feet"] # list of the desired signals (feet, right/left_hand, tounge)
+    SIGNALS = ["tounge"] # list of the desired signals (feet, right/left_hand, tounge)
 
     real = torch.randn((48, 1, 400))
     DESIRED_STEPS = 6
@@ -181,6 +181,8 @@ def main():
     # writer_fake = SummaryWriter(f"logs/EEG/fake")
 
     _ = load_checkpoint(gen, opt_gen, "models/one_channel/all/ALL_generator_6_20.pth")
+    _ = load_checkpoint(critic, opt_critic, "models/one_channel/all/ALL_critic_6_20.pth")
+
 
     gen.train()
     critic.train()
@@ -219,15 +221,15 @@ def main():
                 SIGNAL_CHANNELS
             )
             print(
-                f"Epoch [{epoch}/{num_epochs}] \
+                f"Epoch [{epoch+1}/{num_epochs}] \
                   Loss D: {loss_critic:.4f}, loss G: {loss_gen:.4f}"
             )
 
             # if epoch % 250:
             #     save_checkpoint(step, epoch, gen, opt_gen, "generator_checkpoint.pth")
             #     save_checkpoint(step, epoch, critic, opt_critic, "critic_checkpoint.pth")
-        save_checkpoint(step, num_epochs, gen, opt_gen, "feet_generator.pth")
-        save_checkpoint(step, num_epochs, critic, opt_critic, "feet_critic.pth")
+        save_checkpoint(step, num_epochs, gen, opt_gen, "tounge_generator.pth")
+        save_checkpoint(step, num_epochs, critic, opt_critic, "tounge_critic.pth")
 
         step += 1  # progress to the next img size
 
