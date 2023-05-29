@@ -113,8 +113,8 @@ def train_fn(critic,
             # tensorboard_step += 1
         
         if epoch % 10 == 0 and epoch != 0:
-            save_checkpoint(step, epoch, gen, opt_gen, "tounge_generator_checkpoint.pth")
-            save_checkpoint(step, epoch, critic, opt_critic, "tounge_critic_checkpoint.pth")
+            save_checkpoint(step, epoch, gen, opt_gen, "rhand_generator_checkpoint.pth")
+            save_checkpoint(step, epoch, critic, opt_critic, "rhand_critic_checkpoint.pth")
 
     return tensorboard_step, alpha, loss_critic, loss_gen
 
@@ -135,7 +135,7 @@ def main():
     IN_CHANNELS = 50
     Z_DIM = 200
     NUM_EPOCHS = 50 # half for fading half when faded in
-    BATCH_SIZES = [3072, 3072, 2048, 1536, 1024, 512, 512]
+    BATCH_SIZES = [3072, 3072, 2048, 1536, 1024, 512, 396]
     PROGRESSIVE_EPOCHS = [NUM_EPOCHS] * len(BATCH_SIZES)
     CRITIC_ITERATIONS = 5
     LAMBDA_GP = 10
@@ -143,7 +143,7 @@ def main():
     # Dataset parameters
     DATA_FOLDER = "resources/data"
     SUBJECT_IDS = [1] # list from 1-9, MI_DATASET_ALL uses all by default
-    SIGNALS = ["tounge"] # list of the desired signals (feet, right/left_hand, tounge)
+    SIGNALS = ["right_hand"] # list of the desired signals (feet, right/left_hand, tongue)
 
     real = torch.randn((48, 1, 400))
     DESIRED_STEPS = 6
@@ -229,8 +229,8 @@ def main():
             # if epoch % 250:
             #     save_checkpoint(step, epoch, gen, opt_gen, "generator_checkpoint.pth")
             #     save_checkpoint(step, epoch, critic, opt_critic, "critic_checkpoint.pth")
-        save_checkpoint(step, num_epochs, gen, opt_gen, "tounge_generator.pth")
-        save_checkpoint(step, num_epochs, critic, opt_critic, "tounge_critic.pth")
+        save_checkpoint(step, num_epochs, gen, opt_gen, "rhand_generator.pth")
+        save_checkpoint(step, num_epochs, critic, opt_critic, "rhand_critic.pth")
 
         step += 1  # progress to the next img size
 

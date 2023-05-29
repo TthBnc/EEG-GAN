@@ -201,11 +201,11 @@ for signal_size in SIGNAL_SIZES:
     last_signal_size = signal_size
 
 
-dataset = MI_Dataset_ALL("resources/data", signals=["left_hand"], verbose=True)
+dataset = MI_Dataset_ALL("resources/data", subject_ids=[1,2,3,5,6,7,8,9], signals=["right_hand"], verbose=True)
 loader = DataLoader(dataset, batch_size=48, shuffle=True)
 
 gen = EEG_PRO_GAN_Generator(200, 50, SIGNAL_SIZES[0], factors=FACTORS, signal_channels=1).to("cpu")
-checkpoint = torch.load("models/lhand_generator_6_50.pth", map_location=torch.device('cpu'))
+checkpoint = torch.load("models/rhand_generator_6_50.pth", map_location=torch.device('cpu'))
 gen.load_state_dict(checkpoint["model_state"])
 gen.eval()
 fake = gen(fixed_noise, alpha=0.5, steps=6, scale_factors=SCALE_FACTORS)
