@@ -300,6 +300,7 @@ class MI_Dataset_ALL(Dataset):
         
         if self.flatten:
             self.X = self.X.reshape(-1, 1, self.X.shape[-1])
+            self.y = np.repeat(self.y, 22)
 
         self.X = torch.from_numpy(self.X).float()
         self.y = torch.from_numpy(self.y).long()
