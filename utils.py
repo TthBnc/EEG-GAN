@@ -11,13 +11,13 @@ class ResizeTransform:
         X_resized = signal.resample(X, self.new_size, axis=2)
         return X_resized, y
 
-def gradient_penalty(critic, real, alpha, step, fake, device="cpu"):
+def gradient_penalty(critic, real, labels, alpha, step, fake, device="cpu"):
     BATCH_SIZE, C, H = real.shape
     beta = torch.rand((BATCH_SIZE, 1, 1)).repeat(1, C, H).to(device)
     interpolated_images = real * beta + fake * (1 - beta)
 
     # Calculate critic scores
-    mixed_scores = critic(interpolated_images, alpha, step,)
+    mixed_scores = critic(interpolated_images, labels, alpha, step,)
 
     # Take the gradient of the scores with respect to the images
     gradient = torch.autograd.grad(

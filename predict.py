@@ -200,6 +200,8 @@ for signal_size in SIGNAL_SIZES:
         SCALE_FACTORS.append(signal_size / last_signal_size)
     last_signal_size = signal_size
 
+signal_to_label = {'feet': 1, 'left_hand': 2, 'right_hand': 3, 'tongue': 4}
+
 
 # dataset = MI_Dataset_ALL("resources/data", subject_ids=[1,2,3,5,6,7,8,9], signals=["right_hand"], verbose=True)
 # loader = DataLoader(dataset, batch_size=48, shuffle=True)

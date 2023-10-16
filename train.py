@@ -38,7 +38,7 @@ def train_fn(critic,
             PROGRESSIVE_EPOCHS,
             SIGNAL_CHANNELS):
     loop = tqdm(loader)
-    for batch_idx, (real, _) in enumerate(loop):
+    for batch_idx, (real, labels) in enumerate(loop):
         real = real.to(DEVICE)
         cur_batch_size = real.shape[0]
 
@@ -47,12 +47,12 @@ def train_fn(critic,
         with torch.cuda.amp.autocast():
             for _ in range(CRITIC_ITERATIONS):
                 noise = torch.randn(cur_batch_size, Z_DIM, 1).to(DEVICE)
-                fake = gen(noise, alpha=alpha, steps=step, scale_factors=SCALE_FACTORS)
-                critic_real = critic(real, alpha=alpha, steps=step).reshape(-1)
+                fake = gen(noise, labels, alpha=alpha, steps=step, scale_factors=SCALE_FACTORS)
+                critic_real = critic(real, labels, alpha=alpha, steps=step).reshape(-1)
                 # critic_fake = critic(fake.detach(), alpha=alpha, steps=step).reshape(-1)
-                critic_fake = critic(fake, alpha=alpha, steps=step).reshape(-1)
+                critic_fake = critic(fake, labels, alpha=alpha, steps=step).reshape(-1)
 
-                gp = gradient_penalty(critic, real, alpha, step, fake, device=DEVICE)
+                gp = gradient_penalty(critic, real, labels, alpha, step, fake, device=DEVICE)
                 w_dist = torch.mean(critic_real) - torch.mean(critic_fake)
                 # Update the critic loss function
                 loss_critic = -w_dist + torch.max(w_dist, torch.zeros_like(w_dist)) * LAMBDA_GP * gp
@@ -67,7 +67,7 @@ def train_fn(critic,
 
         # Train Generator: max E[critic(gen_fake)] <-> min -E[critic(gen_fake)]
         with torch.cuda.amp.autocast():
-            gen_fake = critic(fake, alpha=alpha, steps=step).reshape(-1)
+            gen_fake = critic(fake, labels, alpha=alpha, steps=step).reshape(-1)
             loss_gen = -torch.mean(gen_fake)
 
         # opt_gen.zero_grad()
@@ -113,8 +113,9 @@ def train_fn(critic,
             # tensorboard_step += 1
         
         if epoch % 10 == 0 and epoch != 0:
-            save_checkpoint(step, epoch, gen, opt_gen, "rhand_generator_checkpoint.pth")
-            save_checkpoint(step, epoch, critic, opt_critic, "rhand_critic_checkpoint.pth")
+            pass
+            # save_checkpoint(step, epoch, gen, opt_gen, "rhand_generator_checkpoint.pth")
+            # save_checkpoint(step, epoch, critic, opt_critic, "rhand_critic_checkpoint.pth")
 
     return tensorboard_step, alpha, loss_critic, loss_gen
 
@@ -134,16 +135,17 @@ def main():
     SIGNAL_CHANNELS = 1 # 22 # 3 if cz, c4 and c3
     IN_CHANNELS = 50
     Z_DIM = 200
-    NUM_EPOCHS = 50 # half for fading half when faded in
+    NUM_EPOCHS = 2 # half for fading half when faded in
     BATCH_SIZES = [3072, 3072, 2048, 1536, 1024, 512, 396]
     PROGRESSIVE_EPOCHS = [NUM_EPOCHS] * len(BATCH_SIZES)
-    CRITIC_ITERATIONS = 5
+    CRITIC_ITERATIONS = 1
     LAMBDA_GP = 10
 
     # Dataset parameters
     DATA_FOLDER = "resources/data"
     SUBJECT_IDS = [1] # list from 1-9, MI_DATASET_ALL uses all by default
-    SIGNALS = ["right_hand"] # list of the desired signals (feet, right/left_hand, tongue)
+    # SIGNALS = ["right_hand"] # list of the desired signals (feet, right/left_hand, tongue)
+    SIGNALS = None 
 
     real = torch.randn((48, 1, 400))
     DESIRED_STEPS = 6
@@ -168,7 +170,7 @@ def main():
     # initialize gen and disc, note: discriminator should be called critic,
     # according to WGAN paper (since it no longer outputs between [0, 1])
     gen = EEG_PRO_GAN_Generator(Z_DIM, IN_CHANNELS, SIGNAL_SIZES[0], factors=FACTORS, signal_channels=SIGNAL_CHANNELS).to(DEVICE)
-    critic = EEG_PRO_GAN_Discriminator(Z_DIM, IN_CHANNELS, SIGNAL_SIZES[0], factors=FACTORS, signal_channels=SIGNAL_CHANNELS).to(DEVICE)
+    critic = EEG_PRO_GAN_Discriminator(Z_DIM, IN_CHANNELS, SIGNAL_SIZES[0], factors=FACTORS, scale_factors=SCALE_FACTORS, signal_channels=SIGNAL_CHANNELS).to(DEVICE)
 
     # initializate optimizer
     opt_gen = optim.Adam(gen.parameters(), lr=LEARNING_RATE, betas=(0.0, 0.99))
@@ -181,14 +183,14 @@ def main():
     writer = SummaryWriter(f"logs/EEG")
     # writer_fake = SummaryWriter(f"logs/EEG/fake")
 
-    _ = load_checkpoint(gen, opt_gen, "models/one_channel/all/ALL_generator_6_20.pth")
-    _ = load_checkpoint(critic, opt_critic, "models/one_channel/all/ALL_critic_6_20.pth")
+    # _ = load_checkpoint(gen, opt_gen, "models/one_channel/all/ALL_generator_6_20.pth")
+    # _ = load_checkpoint(critic, opt_critic, "models/one_channel/all/ALL_critic_6_20.pth")
 
 
     gen.train()
     critic.train()
 
-    step = DESIRED_STEPS 
+    step = 0 
     tensorboard_step = 0
     for num_epochs in PROGRESSIVE_EPOCHS[step:]:
         alpha = 1e-5

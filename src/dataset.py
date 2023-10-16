@@ -295,13 +295,14 @@ class MI_Dataset_ALL(Dataset):
         self.epochs = self.epochs.crop(tmin=self.baseline[-1], tmax=self.tmax)
         #self.epochs.plot()
         del self.raws
-
     def format_data(self):
         # self.X = self.epochs.get_data()
         self.X = self.epochs.get_data()[:, :, :400]
 
         self.y = self.epochs.events[:, -1]
         self.y -= 1  # start at 0
+        # self.y = np.array([signal for signal, signal_id in self.epochs.event_id.items() if signal_id in self.y])
+
 
         if self.transform:
             self.X, self.y = self.transform(self.X, self.y)

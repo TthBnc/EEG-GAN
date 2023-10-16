@@ -5,9 +5,12 @@ from math import log2
 
 class WSConv1d(nn.Module):
     def __init__(
-        self, in_channels, out_channels, kernel_size=9, stride=1, padding=1, gain=2
-    ):
+        self, in_channels, out_channels, kernel_size=9, stride=1, padding=1, gain=2):
         super(WSConv1d, self).__init__()
+        self.in_channels = in_channels
+        self.gain = gain
+        self.kernel_size = kernel_size
+
         self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride, padding=kernel_size//2)
         self.scale = (gain / (in_channels * kernel_size)) ** 0.5
         self.bias = self.conv.bias
@@ -16,8 +19,20 @@ class WSConv1d(nn.Module):
         nn.init.normal_(self.conv.weight)
         nn.init.zeros_(self.bias)
 
-    def forward(self, x):
-        return self.conv(x * self.scale) + self.bias.view(1, self.bias.shape[0], 1)
+    def forward(self, x, initial=False):
+        if initial:
+            # Reset in_channels
+            self.conv = nn.Conv1d(self.in_channels + 1, self.conv.out_channels, self.conv.kernel_size, self.conv.stride, self.conv.padding).to("cuda")
+            self.scale = (self.gain / (self.in_channels + 1 * self.kernel_size)) ** 0.5
+            self.bias = self.conv.bias
+            self.conv.bias = None
+
+            nn.init.normal_(self.conv.weight)
+            nn.init.zeros_(self.bias)
+
+        a = self.conv(x * self.scale)
+        b = self.bias.view(1, self.bias.shape[0], 1)
+        return a + b
 
 class PixelNorm(nn.Module):
     def __init__(self, epsilon=1e-8):
@@ -54,9 +69,15 @@ class ConvBlock(nn.Module):
 
 
 class EEG_PRO_GAN_Generator(nn.Module):
-    def __init__(self, z_dim, in_channels, initial_signal_size, factors, signal_channels=1):
+    def __init__(self, z_dim, in_channels, initial_signal_size, factors,
+                 num_classes=4,
+                 embed_size=200,
+                 signal_channels=1):
         super(EEG_PRO_GAN_Generator, self).__init__()
-
+        
+        # Conditional part
+        self.embed = nn.Embedding(num_classes, embed_size)
+        
         self.z_dim = z_dim
         self.initial_signal_size = initial_signal_size
         self.in_channels = in_channels
@@ -70,8 +91,8 @@ class EEG_PRO_GAN_Generator(nn.Module):
         #     nn.LeakyReLU(0.2),
         #     PixelNorm(),
         # )
-        self.initial = nn.Sequential(
-            nn.Linear(z_dim, 50*initial_signal_size),
+        self.initial = nn.Sequential( # adding embed due to Conditional
+            nn.Linear(z_dim+embed_size, 50*initial_signal_size),
             nn.LeakyReLU(0.2)
         )
 
@@ -104,10 +125,15 @@ class EEG_PRO_GAN_Generator(nn.Module):
         return alpha * generated + (1 - alpha) * upscaled
 
 
-    def forward(self, x, alpha, steps, scale_factors):
+    def forward(self, x, labels, alpha, steps, scale_factors):
         # during training before calling gen
         # need to check if we are at the last step or not
         x = x.view(-1, self.z_dim)
+
+        ## Conditional part
+        embedding = self.embed(labels)
+        x = torch.cat([x, embedding], dim=1)
+        
         out = self.leaky(self.initial(x))
         out = out.view(-1, 50, self.initial_signal_size)
 
@@ -127,13 +153,20 @@ class EEG_PRO_GAN_Generator(nn.Module):
 
 
 class EEG_PRO_GAN_Discriminator(nn.Module):
-    def __init__(self, z_dim, in_channels, initial_signal_size, factors, signal_channels=1):
+    def __init__(self, z_dim, in_channels, initial_signal_size, factors,
+                 scale_factors,
+                 num_classes = 4,
+                 signal_channels=1):
         super(EEG_PRO_GAN_Discriminator, self).__init__()
 
         self.initial_signal_size = initial_signal_size
-        self.prog_blocks, self.signal_layers = nn.ModuleList([]), nn.ModuleList([])
+        # self.embed = nn.Embedding(num_classes, initial_signal_size)
+        self.prog_blocks, self.signal_layers, self.embeds = nn.ModuleList([]), nn.ModuleList([]), nn.ModuleList([])
+        
+        self.embeds.append(nn.Embedding(num_classes, int(initial_signal_size)))
+        
         self.leaky = nn.LeakyReLU(0.2)
-
+        accumulated_product = 1
         for i in range(len(factors) - 1, 0, -1):
             conv_in = int(in_channels * factors[i])
             conv_out = int(in_channels * factors[i - 1])
@@ -141,6 +174,8 @@ class EEG_PRO_GAN_Discriminator(nn.Module):
             self.signal_layers.append(
                 WSConv1d(signal_channels, conv_in, kernel_size=1, stride=1, padding=0)
             )
+            accumulated_product *= scale_factors[i-1]
+            self.embeds.append(nn.Embedding(num_classes, int(initial_signal_size*accumulated_product)))
 
         self.initial_signal = WSConv1d(
             signal_channels, in_channels, kernel_size=1, stride=1, padding=0
@@ -183,9 +218,20 @@ class EEG_PRO_GAN_Discriminator(nn.Module):
         return alpha * out + (1 - alpha) * downscaled
 
     
-    def forward(self, x, alpha, steps):
+    def forward(self, x, labels, alpha, steps):
         cur_step = len(self.prog_blocks) - steps
-        out = self.leaky(self.signal_layers[cur_step](x))
+
+        embedding = self.embeds[steps](labels)
+        # embedding = self.embed(labels)
+        
+        embed = embedding.view(labels.shape[0], 1, x.shape[2])
+        
+        x = torch.cat([x, embed], dim=1)
+
+        # initial_step = self.signal_layers[cur_step]
+        # initial_step.initial = True
+        out = self.leaky(self.signal_layers[cur_step](x, True))
+        # out = self.leaky(initial_step(x))
 
         if steps == 0:
             # print(f'1 {out.shape}')
